@@ -253,7 +253,7 @@ def chunk_text(text: str, max_chars: int = 3800):
     return chunks
 
 
-def text_to_speech(script_text: str, out_path: str, api_key: str, voice: str = "fable"):
+def text_to_speech(script_text: str, out_path: str, api_key: str, voice: str = "onyx"):
     from pydub import AudioSegment
 
     chunks = chunk_text(script_text)
