@@ -1,0 +1,43 @@
+name: Daily Book of Mormon Study
+
+on:
+  schedule:
+    # 11:00 UTC = 5:00am Central / 6:00am Eastern (adjust to your liking).
+    # GitHub's cron can run a few minutes late, so don't rely on the exact minute.
+    - cron: "0 11 * * *"
+  workflow_dispatch: {}  # lets you trigger it manually from the Actions tab
+
+permissions:
+  contents: write
+
+jobs:
+  generate-and-send:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install ffmpeg (needed by pydub)
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run daily study generator
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: python main.py
+
+      - name: Commit new episode, feed, and bookmark
+        run: |
+          git config user.name "bom-study-bot"
+          git config user.email "actions@github.com"
+          git add state.json docs/
+          git diff --quiet --cached || git commit -m "Publish today's episode"
+          git push
