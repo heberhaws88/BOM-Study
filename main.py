@@ -7,11 +7,11 @@ Each run:
   3. Asks Claude to write a 15-25 minute institute-style commentary
      (witty, Bytheway-ish, tied to life application + history/war stories)
   4. Converts that script to an MP3 with OpenAI TTS
-  5. Emails the MP3 via Resend
+  5. Publishes it to a podcast feed (GitHub Pages)
   6. Advances the bookmark in state.json (the GitHub Action commits this back)
 
 Run with --dry-run to print the fetched chapter + generated script WITHOUT
-calling TTS or sending email or advancing state. Good for testing/debugging.
+calling TTS or touching the feed or advancing state. Good for testing/debugging.
 """
 
 import os
@@ -60,8 +60,14 @@ BOOKS = [
 
 def build_syllabus():
     syllabus = []
-    for uri, title in INTRO_ITEMS:
-        syllabus.append({"uri": f"/scriptures/bofm/{uri}", "title": title})
+    intro_titles = [title for _, title in INTRO_ITEMS]
+    syllabus.append(
+        {
+            "uris": [f"/scriptures/bofm/{uri}" for uri, _ in INTRO_ITEMS],
+            "title": "Introduction to the Book of Mormon",
+            "section_labels": intro_titles,
+        }
+    )
     for slug, name, num_chapters in BOOKS:
         for ch in range(1, num_chapters + 1):
             syllabus.append(
@@ -111,6 +117,16 @@ def fetch_chapter_text(uri: str) -> str:
     )
 
 
+def fetch_combined_text(uris: list, section_labels: list) -> str:
+    """Fetches several scripture pages and stitches them into one labeled block,
+    used for the combined Introduction episode."""
+    parts = []
+    for uri, label in zip(uris, section_labels):
+        text = fetch_chapter_text(uri)
+        parts.append(f"=== {label} ===\n{text}")
+    return "\n\n".join(parts)
+
+
 # ---------------------------------------------------------------------------
 # 3. GENERATE THE COMMENTARY SCRIPT
 # ---------------------------------------------------------------------------
@@ -130,36 +146,38 @@ VOICE BLEND:
 - Blend these naturally within a single episode rather than switching modes abruptly — humor and
   tenderness can sit right next to each other, the way they do in a good sacrament meeting talk.
 
-EXTREME OWNERSHIP THREAD:
-- The listener is a soldier and a fan of Jocko Willink's "Extreme Ownership." Where a chapter's
-  principle genuinely overlaps with one of that book's ideas, name the connection explicitly and
-  show your work — don't just borrow the vocabulary, actually explain the parallel:
-  - Extreme Ownership (leaders own every outcome, no blaming subordinates or circumstances)
-  - No Bad Teams, Only Bad Leaders
-  - Believe in the mission — and if you don't, find out why, then help others believe
-  - Check the Ego
-  - Cover and Move (mutual support, no true individual success)
-  - Simple, Prioritize and Execute
-  - Decentralized Command (leaders at every level, not just the top)
-  - Discipline Equals Freedom
-- This should feel like a genuine "huh, that's the same principle" insight, not a forced tie-in
-  every single day. Some chapters (covenant, atonement, personal repentance, faith) may connect
-  more to Kearon's compassionate register than to Extreme Ownership at all, and that's fine —
-  never manufacture a leadership angle where the text is really about something else.
+LEADERSHIP AND ACCOUNTABILITY THREAD:
+- The listener is a soldier who cares about leadership and personal accountability. The Book of
+  Mormon is full of moments that embody hard-nosed leadership principles: leaders who own every
+  outcome instead of blaming their people or their circumstances, leaders who check their ego,
+  captains and prophets who believe fully in their mission and get others to believe in it too,
+  people who cover each other rather than succeeding alone, moments of radical personal
+  responsibility for failure, and the discipline that produces real freedom rather than
+  restricting it.
+- When a chapter shows one of these dynamics — Mormon taking responsibility for his record's
+  faults, Captain Moroni's decisiveness, Helaman's stripling warriors trusting their training,
+  Alma the Younger owning his own turnaround rather than explaining it away — name the leadership
+  principle plainly and show how the text itself demonstrates it. Draw the insight straight out
+  of the scripture; do not reference or attribute it to any modern author, book, or outside
+  framework. It should feel like it was always there in the text, because it was.
+- This should feel like a genuine "huh, that's exactly what real leadership looks like" insight,
+  not a forced tie-in every single day. Some chapters (covenant, atonement, personal repentance,
+  faith) may connect more to Kearon's compassionate register than to leadership at all, and
+  that's fine — never manufacture a leadership angle where the text is really about something
+  else.
 
 THE THROUGHLINE — JOY:
-- Underneath the humor, the history, and the Extreme Ownership parallels, the point of every
-  single episode is the same: "Men are that they might have joy" (2 Nephi 2:25) — this book is
+- Underneath the humor, the history, and the leadership moments, the point of every single
+  episode is the same: "Men are that they might have joy" (2 Nephi 2:25) — this book is
   ultimately about finding real, durable happiness, not just about doing more or trying harder.
   Every episode should circle back to that somewhere, even briefly.
 - Don't let this collapse into forced positivity or a slogan. Ground it in the specific chapter:
   what does THIS chapter say about where joy actually comes from, what gets in its way, or what
   it costs? Ownership, discipline, and hard obedience are in service of joy, not a substitute
-  for it — when you draw an Extreme Ownership parallel, it's worth naming why the discipline
-  matters: not for its own sake, but because it's what actually produces a life you can be happy
-  in. Some days that throughline is a single closing sentence; other days the whole chapter is
-  explicitly about joy or its opposite (bondage, misery, guilt) and it can run all the way
-  through.
+  for it — when you draw out a leadership moment, it's worth naming why the discipline matters:
+  not for its own sake, but because it's what actually produces a life you can be happy in. Some
+  days that throughline is a single closing sentence; other days the whole chapter is explicitly
+  about joy or its opposite (bondage, misery, guilt) and it can run all the way through.
 
 GENERAL RULES:
 - Talk TO the listener like a trusted teacher would, not AT them. Use "you," ask rhetorical
@@ -172,9 +190,9 @@ GENERAL RULES:
   sports, or everyday life. War stories land especially well for him, and Revolutionary War
   stories are a particular favorite — reach for one when there's a real, non-forced connection
   (courage under fire, holding a line, unlikely leadership, sacrifice, brotherhood). Never force
-  a war story into a chapter where it doesn't fit; variety is good, and an Extreme Ownership
-  connection can stand in for the "outside story" slot on days when that fits better than history
-  does.
+  a war story into a chapter where it doesn't fit; variety is good, and a leadership moment drawn
+  straight from the scripture text can stand in for the "outside story" slot on days when that
+  fits better than history does.
 - Close with a short, practical "take this into your day" thought — one or two sentences, not
   a bullet list.
 - Target length: written for spoken delivery at roughly 150 words per minute, aiming for an
@@ -185,6 +203,11 @@ GENERAL RULES:
 - Quote scripture sparingly and only short phrases (a handful of words) — paraphrase the verse
   content in your own words rather than reading it verbatim at length.
 - Open with a quick, engaging hook related to the chapter — not "Today we're studying..."
+- Some days the reading text you receive is actually several short pieces stitched together,
+  each marked with a line like "=== Title Page ===". When you see these markers, move through
+  them in order as one flowing episode (not five separate mini-episodes) — treat the whole thing
+  as a single reading with several short movements, and aim for the fuller end of the length
+  range (20-25 minutes) since there's more ground to cover.
 """
 
 
@@ -230,7 +253,7 @@ def chunk_text(text: str, max_chars: int = 3800):
     return chunks
 
 
-def text_to_speech(script_text: str, out_path: str, api_key: str, voice: str = "onyx"):
+def text_to_speech(script_text: str, out_path: str, api_key: str, voice: str = "fable"):
     from pydub import AudioSegment
 
     chunks = chunk_text(script_text)
@@ -361,8 +384,12 @@ def main():
     index = state["index"] % len(syllabus)
     today = syllabus[index]
 
-    print(f"Today's reading: {today['title']} ({today['uri']})")
-    chapter_text = fetch_chapter_text(today["uri"])
+    if "uris" in today:
+        print(f"Today's reading: {today['title']} (combined: {', '.join(today['uris'])})")
+        chapter_text = fetch_combined_text(today["uris"], today["section_labels"])
+    else:
+        print(f"Today's reading: {today['title']} ({today['uri']})")
+        chapter_text = fetch_chapter_text(today["uri"])
     print(f"Fetched {len(chapter_text)} characters of chapter text.")
 
     anthropic_key = os.environ["ANTHROPIC_API_KEY"]
@@ -372,7 +399,7 @@ def main():
     print(f"\n(~{len(script_text.split())} words)")
 
     if args.dry_run:
-        print("\n[dry run] Skipping TTS, email, and state update.")
+        print("\n[dry run] Skipping TTS and feed publish.")
         return
 
     openai_key = os.environ["OPENAI_API_KEY"]
