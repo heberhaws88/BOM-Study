@@ -54,6 +54,9 @@ MONTHS = {
 def _get_soup(url: str) -> BeautifulSoup:
     resp = requests.get(url, headers=HEADERS, timeout=30)
     resp.raise_for_status()
+    resp.encoding = "utf-8"  # the site doesn't always declare charset in headers;
+    # without this, requests guesses Latin-1 and mangles the en-dash in date
+    # ranges like "August 24-30" into garbage bytes.
     return BeautifulSoup(resp.text, "html.parser")
 
 
@@ -97,12 +100,8 @@ def _date_range_contains(text: str, today: datetime.date) -> bool:
 def find_week_lesson_url(course_url: str, today: datetime.date) -> str:
     """Walks the course's table of contents to find the lesson whose date
     range (e.g. "August 24-30") contains today."""
-    resp = requests.get(course_url, headers=HEADERS, timeout=30)
-    resp.raise_for_status()
-    soup = BeautifulSoup(resp.text, "html.parser")
-
-    all_links = soup.find_all("a", href=True)
-    for a in all_links:
+    soup = _get_soup(course_url)
+    for a in soup.find_all("a", href=True):
         link_text = a.get_text(" ", strip=True)
         if len(link_text) < 10:
             continue
@@ -111,27 +110,6 @@ def find_week_lesson_url(course_url: str, today: datetime.date) -> str:
             if href.startswith("/"):
                 href = CFM_BASE + href
             return href.split("?")[0] + "?lang=eng"
-
-    # DIAGNOSTIC BLOCK -- temporary, to see why no match was found.
-    # Remove this once the real fix is in.
-    print("=== DIAGNOSTIC: no matching lesson link found ===")
-    print(f"Total <a> tags found: {len(all_links)}")
-    print(f"Does raw HTML contain 'August 24'? {'August 24' in resp.text}")
-    print(f"Does raw HTML contain '__NEXT_DATA__' or 'application/json'? "
-          f"{'__NEXT_DATA__' in resp.text or 'application/json' in resp.text}")
-    print("First 15 non-trivial link texts found:")
-    shown = 0
-    for a in all_links:
-        t = a.get_text(" ", strip=True)
-        if len(t) >= 5:
-            print(f"  - {t[:80]!r}  ->  {a.get('href')}")
-            shown += 1
-        if shown >= 15:
-            break
-    print("=== First 2000 chars of raw HTML ===")
-    print(resp.text[:2000])
-    print("=== END DIAGNOSTIC ===")
-
     raise RuntimeError(
         f"Couldn't find a lesson on {course_url} covering {today.isoformat()}. "
         "The manual's table-of-contents structure may have changed — inspect it manually."
