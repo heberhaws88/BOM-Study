@@ -97,8 +97,12 @@ def _date_range_contains(text: str, today: datetime.date) -> bool:
 def find_week_lesson_url(course_url: str, today: datetime.date) -> str:
     """Walks the course's table of contents to find the lesson whose date
     range (e.g. "August 24-30") contains today."""
-    soup = _get_soup(course_url)
-    for a in soup.find_all("a", href=True):
+    resp = requests.get(course_url, headers=HEADERS, timeout=30)
+    resp.raise_for_status()
+    soup = BeautifulSoup(resp.text, "html.parser")
+
+    all_links = soup.find_all("a", href=True)
+    for a in all_links:
         link_text = a.get_text(" ", strip=True)
         if len(link_text) < 10:
             continue
@@ -107,6 +111,27 @@ def find_week_lesson_url(course_url: str, today: datetime.date) -> str:
             if href.startswith("/"):
                 href = CFM_BASE + href
             return href.split("?")[0] + "?lang=eng"
+
+    # DIAGNOSTIC BLOCK -- temporary, to see why no match was found.
+    # Remove this once the real fix is in.
+    print("=== DIAGNOSTIC: no matching lesson link found ===")
+    print(f"Total <a> tags found: {len(all_links)}")
+    print(f"Does raw HTML contain 'August 24'? {'August 24' in resp.text}")
+    print(f"Does raw HTML contain '__NEXT_DATA__' or 'application/json'? "
+          f"{'__NEXT_DATA__' in resp.text or 'application/json' in resp.text}")
+    print("First 15 non-trivial link texts found:")
+    shown = 0
+    for a in all_links:
+        t = a.get_text(" ", strip=True)
+        if len(t) >= 5:
+            print(f"  - {t[:80]!r}  ->  {a.get('href')}")
+            shown += 1
+        if shown >= 15:
+            break
+    print("=== First 2000 chars of raw HTML ===")
+    print(resp.text[:2000])
+    print("=== END DIAGNOSTIC ===")
+
     raise RuntimeError(
         f"Couldn't find a lesson on {course_url} covering {today.isoformat()}. "
         "The manual's table-of-contents structure may have changed — inspect it manually."
@@ -281,251 +306,4 @@ that's the day he's at church using what the week already taught him). Each dail
   (not four -- save the range for the week as a whole). Let each day's takeaway come naturally
   from that day's actual text rather than forcing the same structure every day.
 - Connects that idea to at least one of: leading his crew/company, leading his soldiers, or
-  leading/raising his two boys -- whichever fits best that day, not all three crammed in.
-- Ends with one specific, doable thing for that day.
-
-On Saturday specifically: briefly recap the week's theme, then close with 2-3 discussion
-questions he could bring to Sunday School or the dinner table, since tomorrow is church.
-
-Ground everything in the source excerpt you're given -- it's the real manual text, not a summary
-you're free to depart from. Do not fabricate scripture content, verses, or citations that aren't
-supported by it.
-
-Output ONLY the finished spoken script. No title, no preamble, no markdown.
-"""
-
-
-def generate_script(week: dict, day_info: dict, covered_so_far: list, api_key: str) -> str:
-    import anthropic
-
-    client = anthropic.Anthropic(api_key=api_key)
-    covered_note = (
-        "Nothing covered yet this week -- this is day 1."
-        if not covered_so_far
-        else "Already covered earlier this week: " + "; ".join(covered_so_far)
-    )
-    user_prompt = f"""This week's full Come Follow Me reading: {week['full_scripture_reference']}
-Lesson title: {week['lesson_title']}
-Course of study: {week['course_of_study']}
-
-Today is {day_info['weekday']} -- day {day_info['day_number']} of 6 this week.
-Today's specific slice to cover: {day_info['scripture_slice']}
-Focus note for today: {day_info.get('focus_note', '')}
-
-Source excerpt from this week's Come Follow Me manual, relevant to today:
----
-{day_info.get('source_excerpt', '(none provided)')}
----
-
-{covered_note}
-
-Write today's episode now."""
-
-    resp = client.messages.create(
-        model="claude-sonnet-5",
-        max_tokens=2500,
-        system=SYSTEM_PROMPT,
-        messages=[{"role": "user", "content": user_prompt}],
-    )
-    return "".join(block.text for block in resp.content if block.type == "text")
-
-
-# ---------------------------------------------------------------------------
-# 4. TEXT TO SPEECH (OpenAI), chunked + concatenated into one MP3
-#    -- same approach as text_to_speech() in main.py
-# ---------------------------------------------------------------------------
-
-def chunk_text(text: str, max_chars: int = 3800):
-    paragraphs = [p.strip() for p in text.split("\n") if p.strip()]
-    chunks, current = [], ""
-    for p in paragraphs:
-        candidate = f"{current}\n\n{p}" if current else p
-        if len(candidate) > max_chars:
-            if current:
-                chunks.append(current)
-            current = p
-        else:
-            current = candidate
-    if current:
-        chunks.append(current)
-    return chunks
-
-
-def text_to_speech(script_text: str, out_path: str, api_key: str, voice: str = "onyx"):
-    from pydub import AudioSegment
-
-    chunks = chunk_text(script_text)
-    segment_paths = []
-    for i, chunk in enumerate(chunks):
-        resp = requests.post(
-            "https://api.openai.com/v1/audio/speech",
-            headers={"Authorization": f"Bearer {api_key}"},
-            json={"model": "tts-1-hd", "voice": voice, "input": chunk},
-            timeout=120,
-        )
-        resp.raise_for_status()
-        seg_path = f"/tmp/cfl_segment_{i}.mp3"
-        with open(seg_path, "wb") as f:
-            f.write(resp.content)
-        segment_paths.append(seg_path)
-        time.sleep(0.5)
-
-    combined = AudioSegment.empty()
-    for path in segment_paths:
-        combined += AudioSegment.from_mp3(path)
-        combined += AudioSegment.silent(duration=300)
-    combined.export(out_path, format="mp3", bitrate="96k")
-
-
-# ---------------------------------------------------------------------------
-# 5. PUBLISH TO ITS OWN PODCAST FEED -- docs/come-follow-lead/
-#    (kept separate from docs/ root so the Book of Mormon show is untouched)
-# ---------------------------------------------------------------------------
-
-DOCS_DIR = os.path.join("docs", "come-follow-lead")
-EPISODES_DIR = os.path.join(DOCS_DIR, "episodes")
-MANIFEST_PATH = os.path.join(DOCS_DIR, "episodes.json")
-FEED_PATH = os.path.join(DOCS_DIR, "feed.xml")
-
-
-def get_show_base_url() -> str:
-    """Same derivation as get_pages_base_url() in main.py, plus this show's subfolder."""
-    repo_full = os.environ["GITHUB_REPOSITORY"]  # e.g. "heberhaws88/BOM-Study"
-    owner, repo = repo_full.split("/")
-    return f"https://{owner}.github.io/{repo}/come-follow-lead/"
-
-
-def slugify(text: str) -> str:
-    return "".join(c if c.isalnum() else "-" for c in text.lower()).strip("-")
-
-
-def publish_episode(title: str, mp3_path: str, description: str):
-    from feedgen.feed import FeedGenerator
-    from pydub import AudioSegment
-
-    os.makedirs(EPISODES_DIR, exist_ok=True)
-    base_url = get_show_base_url()
-
-    episodes = json.load(open(MANIFEST_PATH)) if os.path.exists(MANIFEST_PATH) else []
-
-    ep_num = len(episodes) + 1
-    filename = f"{ep_num:04d}-{slugify(title)}.mp3"
-    dest_path = os.path.join(EPISODES_DIR, filename)
-    os.replace(mp3_path, dest_path)
-
-    duration_seconds = int(len(AudioSegment.from_mp3(dest_path)) / 1000)
-    file_size = os.path.getsize(dest_path)
-    pub_date = datetime.datetime.now(datetime.timezone.utc).isoformat()
-
-    episodes.append({
-        "title": title,
-        "filename": filename,
-        "description": description,
-        "pub_date": pub_date,
-        "duration_seconds": duration_seconds,
-        "file_size": file_size,
-    })
-    with open(MANIFEST_PATH, "w") as f:
-        json.dump(episodes, f, indent=2)
-
-    fg = FeedGenerator()
-    fg.load_extension("podcast")
-    fg.title("Come, Follow, Lead")
-    fg.link(href=base_url, rel="alternate")
-    fg.description(
-        "A daily leadership commentary on the Come Follow Me reading -- for a soldier, an "
-        "electrician, a business owner, and a dad raising two boys toward Christ."
-    )
-    fg.language("en")
-    fg.podcast.itunes_category("Religion & Spirituality", "Christianity")
-    fg.podcast.itunes_explicit("no")
-    fg.podcast.itunes_author("Come, Follow, Lead")
-
-    for ep in episodes:
-        fe = fg.add_entry()
-        fe.id(base_url + "episodes/" + ep["filename"])
-        fe.title(ep["title"])
-        fe.description(ep["description"])
-        fe.enclosure(base_url + "episodes/" + ep["filename"], str(ep["file_size"]), "audio/mpeg")
-        fe.pubDate(ep["pub_date"])
-        fe.podcast.itunes_duration(ep["duration_seconds"])
-
-    fg.rss_file(FEED_PATH)
-
-
-# ---------------------------------------------------------------------------
-# MAIN
-# ---------------------------------------------------------------------------
-
-def load_state() -> dict:
-    if os.path.exists(STATE_FILE):
-        with open(STATE_FILE) as f:
-            return json.load(f)
-    return {"week": None, "day_index": 0, "episodes_this_week": []}
-
-
-def save_state(state: dict):
-    with open(STATE_FILE, "w") as f:
-        json.dump(state, f, indent=2)
-
-
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--dry-run", action="store_true", help="Print script, skip TTS/publish/state update")
-    args = parser.parse_args()
-
-    today = datetime.date.today()
-    if today.strftime("%A") == "Sunday":
-        print("Today is Sunday -- no episode (church day). Nothing to do.")
-        return
-
-    anthropic_key = os.environ["ANTHROPIC_API_KEY"]
-    state = load_state()
-    monday_of_this_week = today - datetime.timedelta(days=today.weekday())
-
-    need_new_plan = (
-        state.get("week") is None
-        or state["week"].get("week_start_date") != monday_of_this_week.isoformat()
-    )
-    if need_new_plan:
-        print(f"Planning new week starting {monday_of_this_week.isoformat()}...")
-        week = plan_week(today, anthropic_key)
-        state["week"] = week
-        state["day_index"] = 0
-        state["episodes_this_week"] = []
-    else:
-        week = state["week"]
-
-    day_number = today.weekday() + 1  # Monday=1 ... Saturday=6
-    day_info = next((d for d in week["days"] if d["day_number"] == day_number), None)
-    if day_info is None:
-        raise RuntimeError(f"No day plan found for day_number={day_number} in week plan.")
-
-    print(f"{day_info['weekday']} (day {day_number} of 6): {day_info['scripture_slice']}")
-    script_text = generate_script(week, day_info, state.get("episodes_this_week", []), anthropic_key)
-    print("\n----- GENERATED SCRIPT -----\n")
-    print(script_text)
-    print(f"\n(~{len(script_text.split())} words)")
-
-    if args.dry_run:
-        print("\n[dry run] Skipping TTS and feed publish.")
-        return
-
-    openai_key = os.environ["OPENAI_API_KEY"]
-    mp3_path = "/tmp/come_follow_lead_episode.mp3"
-    text_to_speech(script_text, mp3_path, openai_key)
-    print(f"Wrote {mp3_path}")
-
-    title = f"{day_info['weekday']}: {week['lesson_title']} (day {day_number} of 6)"
-    description = f"{day_info['scripture_slice']} -- {day_info.get('focus_note', '')}"
-    publish_episode(title, mp3_path, description)
-    print(f"Published to podcast feed ({FEED_PATH}).")
-
-    state["day_index"] = day_number
-    state.setdefault("episodes_this_week", []).append(day_info["scripture_slice"])
-    save_state(state)
-    print("State saved.")
-
-
-if __name__ == "__main__":
-    main()
+  leading/raising his two boys -- whichever fits best that day, not all three crammed
