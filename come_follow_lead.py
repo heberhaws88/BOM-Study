@@ -175,34 +175,42 @@ Your job, using ONLY the provided text (do not invent scripture content that isn
 3. For each day, pull out the specific excerpt of the provided source text relevant to that
    day's slice -- enough that a script writer could work from it without the full week's text.
 
-Respond with ONLY a single JSON object, no other text, no markdown fences, in exactly this shape:
-
-{
-  "week_start_date": "YYYY-MM-DD",
-  "course_of_study": "as given",
-  "full_scripture_reference": "e.g. Psalms 49-51; 61-66; 69-72; 77-78; 85-86",
-  "lesson_title": "the manual's own title for the week, in quotes as given",
-  "days": [
-    {"day_number": 1, "weekday": "Monday", "scripture_slice": "...", "focus_note": "...", "source_excerpt": "..."},
-    {"day_number": 2, "weekday": "Tuesday", "scripture_slice": "...", "focus_note": "...", "source_excerpt": "..."},
-    {"day_number": 3, "weekday": "Wednesday", "scripture_slice": "...", "focus_note": "...", "source_excerpt": "..."},
-    {"day_number": 4, "weekday": "Thursday", "scripture_slice": "...", "focus_note": "...", "source_excerpt": "..."},
-    {"day_number": 5, "weekday": "Friday", "scripture_slice": "...", "focus_note": "...", "source_excerpt": "..."},
-    {"day_number": 6, "weekday": "Saturday", "scripture_slice": "...", "focus_note": "...", "source_excerpt": "..."}
-  ]
-}
+Call the submit_week_plan tool with your answer.
 """
 
-
-def extract_json_object(text: str) -> dict:
-    text = text.strip()
-    fence = re.search(r"```(?:json)?\s*(\{.*\})\s*```", text, re.DOTALL)
-    if fence:
-        text = fence.group(1)
-    start, end = text.find("{"), text.rfind("}")
-    if start == -1 or end == -1:
-        raise ValueError(f"No JSON object found in response:\n{text}")
-    return json.loads(text[start : end + 1])
+# Using a tool call (structured output) instead of asking Claude to hand-write JSON --
+# scripture text is full of quotation marks, and a model handwriting raw JSON around that
+# text is prone to producing near-miss JSON. The API validates/encodes this properly.
+WEEK_PLAN_TOOL = {
+    "name": "submit_week_plan",
+    "description": "Submit the parsed weekly Come Follow Me schedule, split into a Monday-Saturday arc.",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "week_start_date": {"type": "string", "description": "YYYY-MM-DD, the Monday of this week"},
+            "course_of_study": {"type": "string"},
+            "full_scripture_reference": {"type": "string"},
+            "lesson_title": {"type": "string"},
+            "days": {
+                "type": "array",
+                "minItems": 6,
+                "maxItems": 6,
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "day_number": {"type": "integer"},
+                        "weekday": {"type": "string"},
+                        "scripture_slice": {"type": "string"},
+                        "focus_note": {"type": "string"},
+                        "source_excerpt": {"type": "string"},
+                    },
+                    "required": ["day_number", "weekday", "scripture_slice", "focus_note", "source_excerpt"],
+                },
+            },
+        },
+        "required": ["week_start_date", "course_of_study", "full_scripture_reference", "lesson_title", "days"],
+    },
+}
 
 
 def plan_week(today: datetime.date, api_key: str) -> dict:
@@ -225,16 +233,19 @@ Plan this week's episodes as instructed."""
         model="claude-sonnet-5",
         max_tokens=4096,
         system=WEEK_PLANNER_PROMPT,
+        tools=[WEEK_PLAN_TOOL],
+        tool_choice={"type": "tool", "name": "submit_week_plan"},
         messages=[{"role": "user", "content": user_prompt}],
     )
-    raw = "".join(block.text for block in resp.content if block.type == "text")
-    plan = extract_json_object(raw)
-    required = {"week_start_date", "course_of_study", "full_scripture_reference", "lesson_title", "days"}
-    missing = required - plan.keys()
-    if missing:
-        raise ValueError(f"Week plan missing keys {missing}. Raw response:\n{raw}")
+    plan = None
+    for block in resp.content:
+        if block.type == "tool_use" and block.name == "submit_week_plan":
+            plan = block.input
+            break
+    if plan is None:
+        raise RuntimeError(f"Claude didn't return a submit_week_plan tool call. Response: {resp.content}")
     if len(plan["days"]) != 6:
-        raise ValueError(f"Expected 6 days in week plan, got {len(plan['days'])}. Raw:\n{raw}")
+        raise ValueError(f"Expected 6 days in week plan, got {len(plan['days'])}. Plan: {plan}")
     return plan
 
 
