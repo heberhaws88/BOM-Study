@@ -1,0 +1,55 @@
+name: Daily Come Follow Lead
+
+on:
+  schedule:
+    # 12:00 UTC = 6:00am MDT / 5:00am MST (America/Denver). Monday-Saturday
+    # only -- Sunday is church day, no episode. GitHub's cron can run a few
+    # minutes late, so don't rely on the exact minute.
+    - cron: "0 12 * * 1-6"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Dry run (print script, skip TTS/publish)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  generate-and-publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install ffmpeg (needed by pydub)
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run Come Follow Lead generator
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
+            python come_follow_lead.py --dry-run
+          else
+            python come_follow_lead.py
+          fi
+
+      - name: Commit new episode, feed, and bookmark
+        if: ${{ github.event.inputs.dry_run != 'true' }}
+        run: |
+          git config user.name "come-follow-lead-bot"
+          git config user.email "actions@github.com"
+          git add come_follow_lead_state.json docs/come-follow-lead
+          git diff --quiet --cached || git commit -m "Publish today's Come Follow Lead episode"
+          git push
