@@ -10,7 +10,7 @@ Each run:
   2. On the first day of a new week, scrapes that week's lesson from
      churchofjesuschrist.org and asks Claude to split it into a
      Monday-Saturday arc
-  3. Asks Claude to write today's ~5-7 minute leadership commentary from
+  3. Asks Claude to write today's ~16-20 minute leadership commentary from
      that day's slice
   4. Converts it to an MP3 with OpenAI TTS
   5. Publishes it to its own podcast feed (docs/come-follow-lead/feed.xml)
@@ -286,20 +286,29 @@ VOICE: a blend of John Bytheway and Thomas S. Monson.
   markdown, or stage directions -- the entire output is what gets spoken aloud, start to finish.
 
 FORMAT: this is a DAILY episode, not the full week in one sitting.
-Each week's reading is divided across six short episodes, Monday through Saturday (no Sunday --
-that's the day he's at church using what the week already taught him). Each daily episode:
-- Covers only that day's assigned slice, not the whole week.
-- Targets roughly 700-1,000 words (about 5-7 minutes spoken).
-- Opens fast -- a one- or two-line hook. He's getting in the truck; get to the point.
-- Explains the day's passage in plain language, then lands on ONE clear leadership idea from it
-  (not four -- save the range for the week as a whole). Let each day's takeaway come naturally
-  from that day's actual text rather than forcing the same structure every day.
-- Connects that idea to at least one of: leading his crew/company, leading his soldiers, or
-  leading/raising his two boys -- whichever fits best that day, not all three crammed in.
-- Ends with one specific, doable thing for that day.
+Each week's reading is divided across six episodes, Monday through Saturday (no Sunday -- that's
+the day he's at church using what the week already taught him). Each daily episode:
+- Covers only that day's assigned slice, not the whole week -- but goes deep on that slice rather
+  than padding. Walk through the passage more thoroughly: don't just make one quick point and
+  move on. Go verse by verse or moment by moment through what's actually happening, in plain
+  language, before layering in application.
+- Targets roughly 2,400-3,000 words (about 16-20 minutes spoken). Reach this length through real
+  substance, not repetition or filler -- more of the actual text explained, two or three distinct
+  angles or stories, not one idea stretched thin.
+- Opens with a real hook -- a story, a scenario, or a vivid question -- not "Today we're studying..."
+- Explains the day's passage in plain language as you go, then draws out two or three leadership
+  ideas from it across the episode (more room today than a short episode allows). Let each day's
+  takeaways come naturally from that day's actual text rather than forcing a fixed template.
+- Connects those ideas to a mix of: leading his crew/company, leading his soldiers, and
+  leading/raising his two boys -- weave between them across the episode rather than picking only one.
+- Include one or two outside stories or analogies where they genuinely fit (a jobsite moment, a
+  military scenario, a historical or well-known story) to illustrate a point -- don't force one in
+  if the passage doesn't call for it.
+- Ends with a clear, doable challenge for that day -- one or two sentences, specific.
 
-On Saturday specifically: briefly recap the week's theme, then close with 2-3 discussion
-questions he could bring to Sunday School or the dinner table, since tomorrow is church.
+On Saturday specifically: spend real time recapping the week's whole arc (not just a line or two),
+tying the week's episodes together, then close with 2-3 discussion questions he could bring to
+Sunday School or the dinner table, since tomorrow is church.
 
 Ground everything in the source excerpt you're given -- it's the real manual text, not a summary
 you're free to depart from. Do not fabricate scripture content, verses, or citations that aren't
@@ -337,7 +346,7 @@ Write today's episode now."""
 
     resp = client.messages.create(
         model="claude-sonnet-5",
-        max_tokens=2500,
+        max_tokens=8192,
         system=SYSTEM_PROMPT,
         messages=[{"role": "user", "content": user_prompt}],
     )
