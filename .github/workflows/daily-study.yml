@@ -4,7 +4,7 @@ on:
   schedule:
     # 11:00 UTC = 5:00am Central / 6:00am Eastern (adjust to your liking).
     # GitHub's cron can run a few minutes late, so don't rely on the exact minute.
-    - cron: "30 19 * * *"
+    - cron: "0 20 * * *"
     
   workflow_dispatch: {}  # lets you trigger it manually from the Actions tab
 
