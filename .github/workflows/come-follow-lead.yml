@@ -5,7 +5,7 @@ on:
     # 12:00 UTC = 6:00am MDT / 5:00am MST (America/Denver). Monday-Saturday
     # only -- Sunday is church day, no episode. GitHub's cron can run a few
     # minutes late, so don't rely on the exact minute.
-    - cron: "0 12 * * 1-6"
+       - cron: "43 12 * * 1-6"
   workflow_dispatch:
     inputs:
       dry_run:
