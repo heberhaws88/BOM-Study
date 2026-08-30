@@ -2,10 +2,12 @@ name: Daily Come Follow Lead
 
 on:
   schedule:
-    # 12:00 UTC = 6:00am MDT / 5:00am MST (America/Denver). Monday-Saturday
-    # only -- Sunday is church day, no episode. GitHub's cron can run a few
-    # minutes late, so don't rely on the exact minute.
-       - cron: "43 12 * * 1-6"
+    # 12:43 UTC = 6:43am MDT / 5:43am MST (America/Denver), every day including
+    # Sunday (Sunday gets a full-week review episode instead of a new day's
+    # reading). Scheduled off the top of the hour on purpose -- GitHub queues
+    # a flood of jobs at round times like :00, which can delay or skip runs;
+    # an odd minute like :43 avoids that, same as the Book of Mormon show.
+    - cron: "43 12 * * *"
   workflow_dispatch:
     inputs:
       dry_run:
