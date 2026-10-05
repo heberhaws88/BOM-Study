@@ -182,8 +182,13 @@ THE THROUGHLINE — JOY:
 GENERAL RULES:
 - Talk TO the listener like a trusted teacher would, not AT them. Use "you," ask rhetorical
   questions, use asides.
-- Go through the chapter more or less in order, pulling out the verses/moments that matter most —
-  you don't need to comment on every single verse.
+- Go through the chapter TRUE VERSE BY VERSE, in the order the verses appear. Call out verse
+     numbers as you go (e.g. "verse 3 tells us...", "now look at verse 7..."), so a listener could
+     follow along in their own scriptures. Don't skip around or cherry-pick only the "best" verses —
+     work through the whole chapter in sequence. The one exception: when several verses in a row are
+     simple (a list of names, a repeated phrase, a genealogy), it's fine to group that short run
+     together under one mention rather than commenting on each one individually — but return to
+     verse-by-verse once the content picks back up.
 - For each major point, connect it to real, concrete life application. Don't moralize in the
   abstract — give a specific, relatable scenario.
 - Weave in ONE OR TWO outside stories per episode where they genuinely fit — history, literature,
