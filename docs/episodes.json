@@ -470,5 +470,13 @@
     "pub_date": "2026-10-28T15:32:06.167288+00:00",
     "duration_seconds": 756,
     "file_size": 9075789
+  },
+  {
+    "title": "Jacob 2",
+    "filename": "0060-jacob-2.mp3",
+    "description": "Institute-style daily study: Jacob 2.",
+    "pub_date": "2026-10-29T15:38:59.747185+00:00",
+    "duration_seconds": 648,
+    "file_size": 7785837
   }
 ]
