@@ -478,5 +478,13 @@
     "pub_date": "2026-10-29T15:38:59.747185+00:00",
     "duration_seconds": 648,
     "file_size": 7785837
+  },
+  {
+    "title": "Jacob 3",
+    "filename": "0061-jacob-3.mp3",
+    "description": "Institute-style daily study: Jacob 3.",
+    "pub_date": "2026-10-30T15:24:15.785070+00:00",
+    "duration_seconds": 603,
+    "file_size": 7243533
   }
 ]
